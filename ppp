@@ -1,0 +1,111 @@
+-- // 💥 BRAINROT ADMIN SERVER | ВСЕ ВИДЯТ ИЗМЕНЕНИЯ //
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local Lighting = game:GetService("Lighting")
+local Workspace = game:GetService("Workspace")
+
+-- СОЗДАЁМ REMOTE EVENT ДЛЯ КОМАНД
+local AdminEvent = Instance.new("RemoteEvent")
+AdminEvent.Name = "AdminCommand"
+AdminEvent.Parent = ReplicatedStorage
+
+-- БЕЛЫЙ СПИСОК (ТОЛЬКО ЭТИ ИГРОКИ МОГУТ КОМАНДОВАТЬ)
+local Whitelist = {
+    "asdqwer90095",
+    "jhgfdsapoiuytrewq007"
+}
+
+-- ФУНКЦИЯ ПРОВЕРКИ, ИМЕЕТ ЛИ ИГРОК ПРАВО
+local function isAdmin(player)
+    for _, name in ipairs(Whitelist) do
+        if player.Name == name then
+            return true
+        end
+    end
+    return false
+end
+
+-- ОБРАБОТЧИК КОМАНД
+AdminEvent.OnServerEvent:Connect(function(player, command, ...)
+    if not isAdmin(player) then return end -- Чужой не пройдёт
+
+    local args = {...}
+
+    if command == "KillAll" then
+        -- Убить всех игроков, кроме админа
+        for _, target in ipairs(Players:GetPlayers()) do
+            if target ~= player and target.Character then
+                local hum = target.Character:FindFirstChild("Humanoid")
+                if hum and hum.Health > 0 then
+                    hum.Health = 0
+                end
+            end
+        end
+    elseif command == "DestroyAll" then
+        -- Удалить ВСЕ части (блоки) на карте НАВСЕГДА
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            if obj:IsA("BasePart") and obj.Name ~= "Terrain" then
+                obj:Destroy()
+            end
+        end
+    elseif command == "ChangeSky" then
+        -- Меняем небо на указанный цвет (передаётся RGB)
+        local r, g, b = args[1], args[2], args[3]
+        if r and g and b then
+            Lighting.Ambient = Color3.fromRGB(r, g, b)
+            Lighting.OutdoorAmbient = Color3.fromRGB(r, g, b)
+            Lighting.TimeOfDay = "14:00:00" -- делаем день, чтобы было видно небо
+            Lighting.FogColor = Color3.fromRGB(r, g, b)
+            Lighting.FogEnd = 100000
+            Lighting.FogStart = 0
+        end
+    elseif command == "BroadcastText" then
+        -- Показываем текст на экране ВСЕМ игрокам
+        local message = args[1]
+        if type(message) == "string" then
+            for _, target in ipairs(Players:GetPlayers()) do
+                local plr = target
+                -- Отправляем текст клиенту (через этот же Event)
+                AdminEvent:FireClient(plr, "ShowText", message)
+            end
+        end
+    elseif command == "Fly" then
+        -- Включаем/выключаем полёт на сервере (будет видно всем)
+        local enable = args[1]
+        if enable == true then
+            -- Включаем полёт
+            local char = player.Character
+            if char then
+                local root = char:FindFirstChild("HumanoidRootPart")
+                local hum = char:FindFirstChild("Humanoid")
+                if root and hum then
+                    -- Убираем гравитацию
+                    local bg = Instance.new("BodyGyro", root)
+                    bg.Name = "AdminFlyGyro"
+                    bg.MaxTorque = Vector3.new(9e9,9e9,9e9)
+                    bg.CFrame = root.CFrame
+                    local bv = Instance.new("BodyVelocity", root)
+                    bv.Name = "AdminFlyVelocity"
+                    bv.MaxForce = Vector3.new(9e9,9e9,9e9)
+                    hum.PlatformStand = true
+                    -- Другие игроки увидят парение
+                end
+            end
+        else
+            -- Выключаем
+            local char = player.Character
+            if char then
+                local root = char:FindFirstChild("HumanoidRootPart")
+                local hum = char:FindFirstChild("Humanoid")
+                if root and hum then
+                    local bg = root:FindFirstChild("AdminFlyGyro")
+                    if bg then bg:Destroy() end
+                    local bv = root:FindFirstChild("AdminFlyVelocity")
+                    if bv then bv:Destroy() end
+                    hum.PlatformStand = false
+                end
+            end
+        end
+    end
+end)
