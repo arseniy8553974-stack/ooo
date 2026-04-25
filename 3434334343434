@@ -1,0 +1,179 @@
+-- // 🎮 BRAINROT ADMIN CLIENT | ГЛАВНАЯ ПАНЕЛЬ //
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+local LocalPlayer = Players.LocalPlayer
+
+-- ЖДЁМ REMOTE EVENT
+local AdminEvent = ReplicatedStorage:WaitForChild("AdminCommand")
+
+-- ПОЛЕТ (ЛОКАЛЬНЫЙ ЭФФЕКТ, НО МОЖНО ИСПОЛЬЗОВАТЬ СЕРВЕРНЫЙ ВКЛ/ВЫКЛ)
+local flying = false
+local bg, bv
+local flySpeed = 50
+
+local function startFly()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChild("Humanoid")
+    if not root or not hum then return end
+    flying = true
+    bg = Instance.new("BodyGyro", root)
+    bg.MaxTorque = Vector3.new(9e9,9e9,9e9)
+    bg.CFrame = root.CFrame
+    bv = Instance.new("BodyVelocity", root)
+    bv.MaxForce = Vector3.new(9e9,9e9,9e9)
+    hum.PlatformStand = true
+    for _, p in ipairs(char:GetDescendants()) do
+        if p:IsA("BasePart") then p.CanCollide = false end
+    end
+    AdminEvent:FireServer("Fly", true) -- Сообщаем серверу включить видимый полёт
+end
+
+local function stopFly()
+    flying = false
+    if bg then bg:Destroy() end
+    if bv then bv:Destroy() end
+    local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
+    if hum then hum.PlatformStand = false end
+    AdminEvent:FireServer("Fly", false)
+end
+
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.KeyCode == Enum.KeyCode.F then
+        if flying then stopFly() else startFly() end
+    end
+end)
+
+-- ДВИЖЕНИЕ В ПОЛЁТЕ (ЛОКАЛЬНО)
+RunService.RenderStepped:Connect(function()
+    if flying and LocalPlayer.Character then
+        local root = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if root then
+            local cam = workspace.CurrentCamera
+            local move = Vector3.zero
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then move += cam.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then move -= cam.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then move -= cam.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then move += cam.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then move += Vector3.new(0,1,0) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then move -= Vector3.new(0,1,0) end
+            if bv then bv.Velocity = move * flySpeed end
+            if bg then bg.CFrame = cam.CFrame end
+        end
+    end
+end)
+
+-- GUI ПАНЕЛЬ (ПОЯВЛЯЕТСЯ ТОЛЬКО ДЛЯ АДМИНА)
+local ScreenGui = Instance.new("ScreenGui", CoreGui)
+ScreenGui.Name = "AdminPanelGUI"
+
+local Main = Instance.new("Frame", ScreenGui)
+Main.Size = UDim2.new(0, 260, 0, 370)
+Main.Position = UDim2.new(0.5, -130, 0.5, -185)
+Main.BackgroundColor3 = Color3.fromRGB(20,20,30)
+Main.BackgroundTransparency = 0.15
+Main.Active = true
+Main.Draggable = true
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0,12)
+Instance.new("UIStroke", Main).Color = Color3.fromRGB(255,0,0)
+
+local Title = Instance.new("TextLabel", Main)
+Title.Size = UDim2.new(1,0,0,35)
+Title.BackgroundTransparency = 1
+Title.Text = "👑 АДМИН-ПАНЕЛЬ"
+Title.TextColor3 = Color3.new(1,1,1)
+Title.Font = Enum.Font.GothamBlack
+Title.TextSize = 18
+
+-- Контейнер кнопок
+local Content = Instance.new("ScrollingFrame", Main)
+Content.Size = UDim2.new(1,-10,1,-40)
+Content.Position = UDim2.new(0,5,0,37)
+Content.BackgroundTransparency = 1
+Content.ScrollBarThickness = 4
+Content.CanvasSize = UDim2.new(0,0,0,320)
+
+local function addButton(text, y, callback)
+    local btn = Instance.new("TextButton", Content)
+    btn.Size = UDim2.new(1,-5,0,35)
+    btn.Position = UDim2.new(0,2,0,y)
+    btn.BackgroundColor3 = Color3.fromRGB(60,60,80)
+    btn.Text = text
+    btn.TextColor3 = Color3.new(1,1,1)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 14
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0,6)
+    btn.MouseButton1Click:Connect(callback)
+    return btn
+end
+
+addButton("💀 Убить ВСЕХ", 5, function()
+    AdminEvent:FireServer("KillAll")
+end)
+
+addButton("🔥 УНИЧТОЖИТЬ ВСЕ БЛОКИ", 50, function()
+    AdminEvent:FireServer("DestroyAll")
+end)
+
+addButton("🌌 Красное небо", 95, function()
+    AdminEvent:FireServer("ChangeSky", 255, 0, 0)
+end)
+
+addButton("🌃 Синее небо", 140, function()
+    AdminEvent:FireServer("ChangeSky", 0, 100, 255)
+end)
+
+addButton("🌅 Обычное небо", 185, function()
+    AdminEvent:FireServer("ChangeSky", 135, 206, 235)
+end)
+
+addButton("🪽 Полёт (F)", 230, function()
+    if flying then stopFly() else startFly() end
+end)
+
+-- ПОЛЕ ВВОДА ТЕКСТА
+local TextBox = Instance.new("TextBox", Content)
+TextBox.Size = UDim2.new(1,-5,0,30)
+TextBox.Position = UDim2.new(0,2,0,275)
+TextBox.PlaceholderText = "Текст для всех..."
+TextBox.Text = ""
+TextBox.TextColor3 = Color3.new(0,0,0)
+TextBox.BackgroundColor3 = Color3.new(1,1,1)
+TextBox.Font = Enum.Font.Gotham
+TextBox.TextSize = 12
+Instance.new("UICorner", TextBox).CornerRadius = UDim.new(0,6)
+
+addButton("📢 ОТПРАВИТЬ ВСЕМ", 315, function()
+    local msg = TextBox.Text
+    if msg ~= "" then
+        AdminEvent:FireServer("BroadcastText", msg)
+    end
+end)
+
+-- ПОЛУЧЕНИЕ ТЕКСТА ОТ СЕРВЕРА (ВСЕ ВИДЯТ)
+local ScreenLabel = Instance.new("TextLabel", CoreGui)
+ScreenLabel.Size = UDim2.new(1,0,0,60)
+ScreenLabel.Position = UDim2.new(0,0,0.8,0)
+ScreenLabel.BackgroundTransparency = 1
+ScreenLabel.Text = ""
+ScreenLabel.TextColor3 = Color3.fromRGB(255,255,0)
+ScreenLabel.Font = Enum.Font.GothamBlack
+ScreenLabel.TextSize = 32
+ScreenLabel.TextStrokeTransparency = 0
+ScreenLabel.Visible = false
+
+AdminEvent.OnClientEvent:Connect(function(cmd, data)
+    if cmd == "ShowText" then
+        ScreenLabel.Text = data
+        ScreenLabel.Visible = true
+        task.wait(8)
+        ScreenLabel.Visible = false
+    end
+end)
+
+print("✅ Админ-панель загружена.")
